@@ -22,11 +22,42 @@ LIGHT_BLUE = (173, 216, 230)
 SKILL_RANGE_COLOR = (135, 206, 235)  # Màu xanh nhạt cho vòng tròn range skill
 FIRE_COLOR = (255, 69, 0)  # Màu cam đỏ cho fire skill
 
+# Base Stats System
+class BaseStats:
+    """Base stats cho tất cả units"""
+    def __init__(self, hp=100, speed=3, attack_speed=60, damage=20, defense=0, attack=20):
+        self.hp = hp
+        self.speed = speed
+        self.attack_speed = attack_speed  # Frames giữa các lần bắn
+        self.damage = damage
+        self.defense = defense
+        self.attack = attack
+
+# Base Player Stats
+PLAYER_BASE_STATS = BaseStats(
+    hp=100,
+    speed=3,
+    attack_speed=60,  # 1 bullet per second
+    damage=20,
+    defense=0,
+    attack=20
+)
+
+# Base Enemy Stats
+ENEMY_BASE_STATS = BaseStats(
+    hp=100,
+    speed=2,
+    attack_speed=60,
+    damage=20,
+    defense=0,
+    attack=20
+)
+
 # Game settings
-PLAYER_SPEED = 3
-PLAYER_FIRE_RATE = 60  # 1 bullet per second
-ENEMY_BASE_SPEED = 2
-ENEMY_BASE_FIRE_RATE = 60
+PLAYER_SPEED = PLAYER_BASE_STATS.speed
+PLAYER_FIRE_RATE = PLAYER_BASE_STATS.attack_speed
+ENEMY_BASE_SPEED = ENEMY_BASE_STATS.speed
+ENEMY_BASE_FIRE_RATE = ENEMY_BASE_STATS.attack_speed
 ENEMY_MAX_SPEED = 5
 ENEMY_MIN_FIRE_RATE = 20
 
@@ -52,6 +83,11 @@ BULLET_DAMAGE = 20
 POWER_SHOT_BONUS_DAMAGE = 20
 POWER_SHOT_SPEED = 10
 
+# Debug: In ra constants
+print(f"🔧 BULLET_SPEED: {BULLET_SPEED}")
+print(f"🔧 WIDTH: {WIDTH}, HEIGHT: {HEIGHT}")
+print(f"🔧 PLAYER_FIRE_RATE: {PLAYER_FIRE_RATE}")
+
 # Tank settings
 TANK_SIZE = 60          # Tăng từ 40 lên 60 (50% lớn hơn)
 TURRET_LENGTH = 55      # Giữ nguyên
@@ -67,9 +103,16 @@ SKILL_TYPE_AREA = "area"                    # Skill vùng (tạo hiệu ứng tr
 TANK_TYPE_NARUTO = "naruto"     # Tank đầu tiên (cũ)
 TANK_TYPE_SASUKE = "sasuke"     # Tank thứ hai (mới)
 
+# Enemy types
+ENEMY_TYPE_BASIC = "basic"
+ENEMY_TYPE_FAST = "fast"
+ENEMY_TYPE_TANK = "tank"
+
 # Fire area settings
-FIRE_AREA_DURATION = 180        # 3 seconds
-FIRE_DAMAGE_PER_SECOND = 5      # Damage mỗi giây
-FIRE_SLOW_FACTOR = 0.5          # Làm chậm 50%
-SPEED_BOOST_FACTOR = 2.0        # Tăng tốc gấp đôi
-SPEED_BOOST_DURATION = 180      # 3 seconds
+FIRE_AREA_DURATION = 300  # 5 seconds
+FIRE_DAMAGE_PER_SECOND = 10
+FIRE_SLOW_FACTOR = 0.5
+
+# Speed boost settings
+SPEED_BOOST_FACTOR = 2.0
+SPEED_BOOST_DURATION = 300  # 5 seconds

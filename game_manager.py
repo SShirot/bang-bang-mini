@@ -1,400 +1,452 @@
 import pygame
-import math
 import random
+import math
 from game_config import *
-from game_objects import Tank, Bullet, FireArea
+from entities.tanks.naruto_tank import NarutoTank
+from entities.tanks.sasuke_tank import SasukeTank
+from entities.enemies.basic_enemy import BasicEnemy
+from entities.enemies.fast_enemy import FastEnemy
+from entities.enemies.tank_enemy import TankEnemy
 
 class GameManager:
+    """Quản lý game với cấu trúc modular mới"""
+    
     def __init__(self):
         self.player = None
-        self.enemy = None
+        self.enemies = []
         self.bullets = []
-        self.enemy_bullets = []
-        self.fire_areas = []  # Danh sách các fire area
-        self.wave = 1
-        self.enemy_killed = False
-        self.paused = False
-        self.selected_tank_type = TANK_TYPE_NARUTO  # Tank mặc định
-        
-    def init_game(self):
-        """Khởi tạo game từ đầu"""
-        # Tạo player tank theo loại đã chọn
-        if self.selected_tank_type == TANK_TYPE_NARUTO:
-            self.player = Tank(WIDTH//2, HEIGHT//2, DARK_GREEN, GREEN, 
-                             tank_type=TANK_TYPE_NARUTO, speed=PLAYER_SPEED, hp=100)
-        else:  # TANK_TYPE_SASUKE
-            self.player = Tank(WIDTH//2, HEIGHT//2, PURPLE, CYAN, 
-                             tank_type=TANK_TYPE_SASUKE, speed=PLAYER_SPEED, hp=100)
-            
-        self.player.original_speed = PLAYER_SPEED
-        self.player.player_fire_rate = PLAYER_FIRE_RATE
-        self.player.player_fire_cooldown = 0
-        
-        self.enemy = Tank(random.randint(30, WIDTH-30), random.randint(30, HEIGHT-30), 
-                         DARK_BLUE, BLUE, speed=ENEMY_BASE_SPEED, hp=100, fire_rate=ENEMY_BASE_FIRE_RATE)
-        
-        self.bullets = []
-        self.enemy_bullets = []
         self.fire_areas = []
+        self.selected_tank_type = TANK_TYPE_NARUTO
+        
+        # Game state
         self.wave = 1
-        self.enemy_killed = False
+        self.score = 0
+        self.paused = False
+        self.game_over = False
         
+        # Initialize game
+        self.init_game()
+    
     def set_tank_type(self, tank_type):
-        """Đặt loại tank cho player"""
+        """Set loại tank được chọn"""
         self.selected_tank_type = tank_type
+    
+    def init_game(self):
+        """Khởi tạo game"""
+        # Tạo player tank
+        if self.selected_tank_type == TANK_TYPE_NARUTO:
+            self.player = NarutoTank(WIDTH//2, HEIGHT//2)
+        elif self.selected_tank_type == TANK_TYPE_SASUKE:
+            self.player = SasukeTank(WIDTH//2, HEIGHT//2)
+        else:
+            # Fallback về Naruto
+            self.player = NarutoTank(WIDTH//2, HEIGHT//2)
         
-    def handle_events(self):
-        """Xử lý các sự kiện game"""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return False
+        # Tạo enemy đầu tiên
+        self.spawn_enemy()
+        
+        # Reset game state
+        self.wave = 1
+        self.score = 0
+        self.game_over = False
+        self.paused = False
+    
+    def spawn_enemy(self):
+        """Spawn enemy mới"""
+        # Chỉ spawn 1 enemy mỗi lần để tăng performance
+        if len(self.enemies) >= 3:  # Giới hạn số enemy tối đa
+            return
+            
+        # Random loại enemy
+        enemy_types = [BasicEnemy, FastEnemy, TankEnemy]
+        enemy_class = random.choice(enemy_types)
+        
+        # Random vị trí spawn
+        x = random.randint(30, WIDTH-30)
+        y = random.randint(30, HEIGHT-30)
+        
+        # Tạo enemy
+        enemy = enemy_class(x, y)
+        enemy.respawn(self.wave)
+        self.enemies.append(enemy)
+    
+    def handle_events(self, events):
+        """Xử lý events"""
+        for event in events:
             if event.type == pygame.KEYDOWN:
-                self.handle_keydown(event.key)
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                self.handle_mouse_click()
-        return True
+                self.handle_keydown(event)
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self.handle_mouse_click(event)
+            elif event.type == pygame.MOUSEMOTION:
+                self.handle_mouse_motion(event)
+        
+        # Xử lý di chuyển liên tục
+        self.handle_continuous_movement()
+        
+        # Xử lý bắn đạn
+        self.handle_continuous_firing()
     
-    def handle_keydown(self, key):
-        """Xử lý phím nhấn"""
-        if key == pygame.K_ESCAPE:
-            return False
-        elif key == pygame.K_p:
+    def handle_keydown(self, event):
+        """Xử lý key press"""
+        if event.key == pygame.K_ESCAPE:
+            return "quit"
+        elif event.key == pygame.K_r:
+            self.restart_game()
+        elif event.key == pygame.K_p:
             self.paused = not self.paused
-        elif key == pygame.K_r and not self.paused:
-            self.init_game()
-        elif key == pygame.K_e and self.player.alive and not self.paused:
-            # E key - xử lý theo loại tank
+        
+        if self.paused:
+            return None
+        
+        # Player movement
+        if event.key == pygame.K_w:
+            self.player.move(0, -1)
+        elif event.key == pygame.K_s:
+            self.player.move(0, 1)
+        elif event.key == pygame.K_a:
+            self.player.move(-1, 0)
+        elif event.key == pygame.K_d:
+            self.player.move(1, 0)
+        
+        # Skill activation
+        if event.key == pygame.K_e:
             if self.player.tank_type == TANK_TYPE_NARUTO:
-                self.handle_skill_activation('dash')
-            else:  # TANK_TYPE_SASUKE
-                self.player.execute_buff_skill('speed_boost')
-        elif key == pygame.K_q and self.player.alive and not self.paused:
-            # Heal là buff skill - sử dụng trực tiếp
-            self.player.execute_buff_skill('heal')
-        elif key == pygame.K_f and self.player.alive and not self.paused:
-            # Shield là buff skill - sử dụng trực tiếp
-            self.player.execute_buff_skill('shield')
-        elif key == pygame.K_SPACE and self.player.alive and not self.paused:
-            # Spacebar - xử lý theo loại tank
+                # Naruto: Dash
+                self.player.activate_skill_mode('dash')
+            elif self.player.tank_type == TANK_TYPE_SASUKE:
+                # Sasuke: Speed Boost
+                self.player.execute_speed_boost()
+        elif event.key == pygame.K_SPACE:
             if self.player.tank_type == TANK_TYPE_NARUTO:
-                self.handle_skill_activation('power_shot')
-            else:  # TANK_TYPE_SASUKE
-                self.handle_skill_activation('fire_area')
-        return True
+                # Naruto: Power Shot
+                self.player.activate_skill_mode('power_shot')
+            elif self.player.tank_type == TANK_TYPE_SASUKE:
+                # Sasuke: Fire Area
+                self.player.activate_skill_mode('fire_area')
+        elif event.key == pygame.K_q:
+            # Heal cho cả hai
+            self.player.execute_heal()
+        elif event.key == pygame.K_f:
+            # Shield cho cả hai
+            self.player.execute_shield()
+        
+        return None
     
-    def handle_skill_activation(self, skill_name):
-        """Xử lý kích hoạt skill mode (chỉ cho directional và area skills)"""
-        if self.player.skill_mode and self.player.active_skill == skill_name:
-            # Nếu đang ở skill mode và nhấn lại cùng skill, tắt skill mode
-            self.player.deactivate_skill_mode()
-        else:
-            # Kích hoạt skill mode mới
-            if self.player.activate_skill_mode(skill_name):
-                # Nếu skill khác đang active, tắt nó trước
-                if self.player.skill_mode and self.player.active_skill != skill_name:
-                    self.player.deactivate_skill_mode()
-                self.player.activate_skill_mode(skill_name)
+    def handle_mouse_click(self, event):
+        """Xử lý mouse click"""
+        if event.button == 1:  # Left click
+            if self.player.skill_mode:
+                # Thực thi skill tại vị trí chuột
+                self.execute_skill_at_target(event.pos)
     
-    def handle_dash(self):
-        """Xử lý skill dash (legacy - giữ lại để tương thích)"""
-        keys = pygame.key.get_pressed()
-        dx, dy = 0, 0
-        if keys[pygame.K_w]: dy -= 1
-        if keys[pygame.K_s]: dy += 1
-        if keys[pygame.K_a]: dx -= 1
-        if keys[pygame.K_d]: dx += 1
-        if dx != 0 or dy != 0:
-            self.player.dash(dx, dy)
-    
-    def handle_power_shot(self):
-        """Xử lý power shot (legacy - giữ lại để tương thích)"""
-        if self.player.skills['power_shot'].ready and self.player.can_fire():
-            self.player.power_shot()
-            self.player.fire()
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            dx = mouse_x - self.player.x
-            dy = mouse_y - self.player.y
-            angle = math.degrees(math.atan2(-dy, dx))
-            self.bullets.append(Bullet(self.player.x, self.player.y, angle, YELLOW, is_power_shot=True))
-    
-    def handle_mouse_click(self):
-        """Xử lý click chuột"""
-        if not self.player.alive or self.paused:
-            return
-            
+    def handle_mouse_motion(self, event):
+        """Xử lý mouse movement"""
+        # Cập nhật turret angle
+        self.player.aim_turret(event.pos)
+        
+        # Cập nhật skill target nếu đang ở skill mode
         if self.player.skill_mode:
-            # Nếu đang ở skill mode, thực thi skill
-            self.execute_skill_at_target()
-        else:
-            # Nếu không ở skill mode, bắn đạn thường
-            if self.player.can_fire():
-                self.player.fire()
-                self.bullets.append(Bullet(self.player.x, self.player.y, self.player.turret_angle, RED))
+            self.player.update_skill_target(event.pos)
     
-    def execute_skill_at_target(self):
-        """Thực thi skill tại vị trí chuột"""
-        if not self.player.skill_mode or not self.player.active_skill:
+    def execute_skill_at_target(self, target_pos):
+        """Thực thi skill tại vị trí mục tiêu"""
+        if not self.player.skill_mode:
             return
-            
-        target_pos = pygame.mouse.get_pos()
+        
+        # Thực thi skill
         result = self.player.execute_skill(target_pos)
         
         if result:
             # Xử lý kết quả skill
-            if self.player.active_skill == 'power_shot' and result:
-                # Thêm power shot bullet vào danh sách
-                self.bullets.append(result)
-            elif self.player.active_skill == 'fire_area' and result[0]:
-                # Thêm fire area vào danh sách
-                self.fire_areas.append(result[1])
-            
-            # Tắt skill mode sau khi thực thi
-            self.player.deactivate_skill_mode()
+            if isinstance(result, list) and len(result) == 2:
+                # Area skill trả về (success, object)
+                success, obj = result
+                if success and obj:
+                    if hasattr(obj, '__class__') and obj.__class__.__name__ == 'FireArea':
+                        self.fire_areas.append(obj)
+            elif hasattr(result, '__class__'):
+                # Object trả về trực tiếp
+                if result.__class__.__name__ == 'Bullet':
+                    self.bullets.append(result)
+                elif result.__class__.__name__ == 'FireArea':
+                    self.fire_areas.append(result)
+        
+        # Tắt skill mode
+        self.player.deactivate_skill_mode()
+    
+    def handle_continuous_movement(self):
+        """Xử lý di chuyển liên tục"""
+        keys = pygame.key.get_pressed()
+        
+        # Di chuyển theo WASD
+        dx, dy = 0, 0
+        if keys[pygame.K_w]:
+            dy -= 1
+        if keys[pygame.K_s]:
+            dy += 1
+        if keys[pygame.K_a]:
+            dx -= 1
+        if keys[pygame.K_d]:
+            dx += 1
+        
+        # Normalize movement vector
+        if dx != 0 or dy != 0:
+            length = (dx*dx + dy*dy)**0.5
+            dx /= length
+            dy /= length
+            self.player.move(dx, dy)
+    
+    def handle_continuous_firing(self):
+        """Xử lý bắn đạn liên tục"""
+        if pygame.mouse.get_pressed()[0]:  # Left mouse button
+            if self.player.can_fire():
+                # Tạo bullet từ player
+                from game_objects import Bullet
+                bullet = Bullet(
+                    self.player.x, self.player.y,
+                    self.player.turret_angle,
+                    self.player.turret_color,
+                    speed=BULLET_SPEED,
+                    damage=self.player.stats.damage,
+                    is_power_shot=False,
+                    owner="player"  # Rõ ràng là bullet từ player
+                )
+                self.bullets.append(bullet)
+                self.player.fire()
+    
+    def update(self):
+        """Cập nhật game state"""
+        if self.paused or self.game_over:
+            return
+        
+        # Update player
+        self.update_player()
+        
+        # Update enemies
+        self.update_enemies()
+        
+        # Update bullets
+        self.update_bullets()
+        
+        # Update fire areas
+        self.update_fire_areas()
+        
+        # Check collisions
+        self.check_collisions()
+        
+        # Check game over
+        if not self.player.alive:
+            self.game_over = True
     
     def update_player(self):
         """Cập nhật player"""
-        if not self.player.alive:
-            return
-            
-        # Cập nhật skill targeting
-        if self.player.skill_mode:
-            self.player.update_skill_target(pygame.mouse.get_pos())
-            
-        keys = pygame.key.get_pressed()
-        dx, dy = 0, 0
-        if keys[pygame.K_w]: dy -= 1
-        if keys[pygame.K_s]: dy += 1
-        if keys[pygame.K_a]: dx -= 1
-        if keys[pygame.K_d]: dx += 1
-        
-        self.player.move(dx, dy)
-        self.player.aim_turret(pygame.mouse.get_pos())
-        self.player.update_skills()
-        self.player.update_fire_cooldown()
+        if self.player and self.player.alive:
+            self.player.update()
     
-    def update_enemy(self):
-        """Cập nhật enemy AI"""
-        if not self.enemy.alive:
-            if not self.enemy_killed:
-                self.enemy_killed = True
-                self.wave += 1
-                if self.player.alive:
-                    self.player.hp = min(100, self.player.hp + 20)
-                pygame.time.wait(1000)
-                self.enemy.respawn(self.wave)
-                self.enemy_killed = False
-            return
-        
-        # Kiểm tra và né đạn
-        dodge_dx, dodge_dy = self.enemy.dodge_bullets(self.bullets)
-        
-        if dodge_dx != 0 or dodge_dy != 0:
-            self.enemy.move(dodge_dx, dodge_dy)
-        else:
-            # Di chuyển ngẫu nhiên
-            if random.randint(1, 120) == 1:
-                self.enemy.random_direction = random.uniform(0, 2 * math.pi)
-            
-            dx = math.cos(self.enemy.random_direction)
-            dy = -math.sin(self.enemy.random_direction)
-            
-            new_x = self.enemy.x + dx * self.enemy.speed
-            new_y = self.enemy.y + dy * self.enemy.speed
-            
-            if new_x < TANK_RADIUS or new_x > WIDTH - TANK_RADIUS or new_y < TANK_RADIUS or new_y > HEIGHT - TANK_RADIUS:
-                self.enemy.random_direction = random.uniform(0, 2 * math.pi)
-            else:
-                self.enemy.move(dx, dy)
+    def update_enemies(self):
+        """Cập nhật enemies - tối ưu hóa performance"""
+        for enemy in self.enemies:
+            if enemy.alive:
+                enemy.update((self.player.x, self.player.y), self.bullets)
                 
-        self.enemy.aim_turret((self.player.x, self.player.y))
-        
-        # Bắn đạn
-        if self.enemy.cooldown <= 0:
-            dist = math.sqrt((self.player.x - self.enemy.x)**2 + (self.player.y - self.enemy.y)**2)
-            if dist < 400:
-                self.enemy_bullets.append(Bullet(self.enemy.x, self.enemy.y, self.enemy.turret_angle, BLUE))
-                self.enemy.cooldown = self.enemy.fire_rate
-        else:
-            self.enemy.cooldown -= 1
+                # Enemy bắn - giảm tần suất bắn để tăng performance
+                if enemy.fire_at_player((self.player.x, self.player.y)) and random.random() < 0.3:
+                    # Tạo bullet từ enemy
+                    from game_objects import Bullet
+                    bullet = Bullet(
+                        enemy.x, enemy.y,
+                        enemy.turret_angle,
+                        enemy.turret_color,
+                        speed=BULLET_SPEED,
+                        damage=enemy.stats.damage,
+                        is_power_shot=False,
+                        owner="enemy"  # Rõ ràng là bullet từ enemy
+                    )
+                    self.bullets.append(bullet)
+    
+    def update_bullets(self):
+        """Cập nhật bullets"""
+
             
-        if self.enemy.dodge_timer > 0:
-            self.enemy.dodge_timer -= 1
+        for bullet in self.bullets[:]:
+            bullet.move()
+            
+            # Xóa bullet ngoài màn hình hoặc đã hit
+            if (bullet.x < -10 or bullet.x > WIDTH + 10 or 
+                bullet.y < -10 or bullet.y > HEIGHT + 10 or not bullet.alive):
+                self.bullets.remove(bullet)
     
     def update_fire_areas(self):
-        """Cập nhật các fire area"""
+        """Cập nhật fire areas - tối ưu hóa performance"""
         for fire_area in self.fire_areas[:]:
             fire_area.update()
             
-            # Kiểm tra enemy trong vùng lửa
-            if self.enemy.alive:
-                if fire_area.check_enemy_in_area(self.enemy):
-                    fire_area.apply_fire_effect(self.enemy)
-                else:
-                    fire_area.remove_fire_effect(self.enemy)
-            
-            # Gây damage mỗi giây (60 frames = 1 giây)
-            if fire_area.timer % 60 == 0:
-                fire_area.damage_enemies()
-            
-            # Xóa fire area đã hết hạn
+            # Xóa fire area hết hạn
             if not fire_area.alive:
-                # Loại bỏ hiệu ứng khỏi enemy
-                if self.enemy.alive:
-                    fire_area.remove_fire_effect(self.enemy)
                 self.fire_areas.remove(fire_area)
-    
-    def update_bullets(self):
-        """Cập nhật đạn"""
-        for bullet in self.bullets[:]:
-            bullet.move()
-            if not bullet.alive:
-                self.bullets.remove(bullet)
                 continue
-            bullet.check_collision(self.enemy)
-
-        for bullet in self.enemy_bullets[:]:
-            bullet.move()
-            if not bullet.alive:
-                self.enemy_bullets.remove(bullet)
-                continue
-            bullet.check_collision(self.player)
-    
-    def update(self):
-        """Cập nhật game chính"""
-        if self.paused:
-            return True
             
-        self.update_player()
-        self.update_enemy()
-        self.update_bullets()
-        self.update_fire_areas()
-        return True
+            # Kiểm tra enemies trong fire area - sử dụng distance squared
+            for enemy in self.enemies:
+                if enemy.alive:
+                    dx = enemy.x - fire_area.x
+                    dy = enemy.y - fire_area.y
+                    distance_squared = dx*dx + dy*dy
+                    radius_squared = fire_area.radius * fire_area.radius
+                    
+                    if distance_squared <= radius_squared:
+                        # Enemy trong fire area
+                        if not hasattr(enemy, 'in_fire_area'):
+                            enemy.in_fire_area = True
+                            enemy.original_speed = enemy.speed
+                            enemy.speed *= FIRE_SLOW_FACTOR
+                        
+                        # Damage mỗi giây
+                        if fire_area.damage_timer <= 0:
+                            enemy.take_damage(FIRE_DAMAGE_PER_SECOND)
+                            fire_area.damage_timer = 60  # 1 second
+                    else:
+                        # Enemy ra khỏi fire area
+                        if hasattr(enemy, 'in_fire_area') and enemy.in_fire_area:
+                            enemy.in_fire_area = False
+                            enemy.speed = enemy.original_speed
+            
+            # Update damage timer
+            if fire_area.damage_timer > 0:
+                fire_area.damage_timer -= 1
+    
+    def check_collisions(self):
+        """Kiểm tra va chạm - tối ưu hóa performance"""
+        # Player bullets vs Enemies
+        for bullet in self.bullets[:]:
+            if not bullet.alive:
+                continue
+                
+            # Sử dụng owner để phân biệt rõ ràng bullet từ player hay enemy
+            if bullet.owner == "player":
+                for enemy in self.enemies[:]:
+                    if not enemy.alive:
+                        continue
+                    
+                    # Sử dụng distance squared để tránh sqrt
+                    dx = bullet.x - enemy.x
+                    dy = bullet.y - enemy.y
+                    distance_squared = dx*dx + dy*dy
+                    
+                    if distance_squared < TANK_RADIUS * TANK_RADIUS:
+                        # Hit enemy
+                        enemy.take_damage(bullet.damage)
+                        bullet.alive = False
+                        
+                        if not enemy.alive:
+                            # Enemy chết
+                            enemy.enemy_killed = True
+                            self.score += 100
+                            
+                            # Player hồi máu
+                            self.player.heal(20)
+                            
+                            # Spawn enemy mới
+                            self.spawn_enemy()
+                            
+                            # Tăng wave
+                            self.wave += 1
+                        break  # Bullet đã hit, không cần check enemy khác
+                        
+            elif bullet.owner == "enemy":
+                # Bullet từ enemy, check vs player
+                dx = bullet.x - self.player.x
+                dy = bullet.y - self.player.y
+                distance_squared = dx*dx + dy*dy
+                
+                if distance_squared < TANK_RADIUS * TANK_RADIUS:
+                    # Hit player
+                    self.player.take_damage(bullet.damage)
+                    bullet.alive = False
+        
+        # Xóa phần này vì đã gộp vào collision detection ở trên
+    
+    def restart_game(self):
+        """Restart game"""
+        self.init_game()
     
     def draw(self, win):
         """Vẽ game"""
+        # Vẽ background - thay đổi từ BLACK sang WHITE để dễ nhìn
         win.fill(WHITE)
         
-        # Vẽ đạn
+        # Vẽ player
+        if self.player and self.player.alive:
+            self.player.draw(win)
+            self.player.draw_skill_targeting(win)
+        
+        # Vẽ enemies
+        for enemy in self.enemies:
+            if enemy.alive:
+                enemy.draw(win)
+        
+        # Vẽ bullets
         for bullet in self.bullets:
-            bullet.draw(win)
-        for bullet in self.enemy_bullets:
-            bullet.draw(win)
+            if bullet.alive:
+                bullet.draw(win)
         
         # Vẽ fire areas
         for fire_area in self.fire_areas:
-            fire_area.draw(win)
-        
-        # Vẽ tanks
-        self.player.draw(win)
-        self.enemy.draw(win)
-        
-        # Vẽ skill targeting
-        self.player.draw_skill_targeting(win)
-        
-        # Vẽ biên màn hình
-        pygame.draw.rect(win, BLACK, (0, 0, WIDTH, HEIGHT), 3)
+            if fire_area.active:
+                fire_area.draw(win)
         
         # Vẽ UI
         self.draw_ui(win)
     
     def draw_ui(self, win):
-        """Vẽ giao diện người dùng"""
+        """Vẽ UI"""
+        if not self.player:
+            return
+        
         # Skill bar
-        if self.player.alive:
-            self.player.draw_skill_bar(win, 20, HEIGHT - 120)
-            
-            # Fire rate cooldown
-            if self.player.player_fire_cooldown > 0:
-                cooldown_font = pygame.font.SysFont(None, 24)
-                cooldown_ratio = self.player.player_fire_cooldown / self.player.player_fire_rate
-                cooldown_text = cooldown_font.render(f"Fire Cooldown: {cooldown_ratio:.1f}s", True, RED)
-                win.blit(cooldown_text, (20, HEIGHT - 160))
-            
-            # Skill mode indicator
-            if self.player.skill_mode:
-                mode_font = pygame.font.SysFont(None, 28)
-                skill_name = self.player.skills[self.player.active_skill].name
-                skill_type = self.player.skills[self.player.active_skill].skill_type
-                
-                if skill_type == SKILL_TYPE_AREA:
-                    mode_text = mode_font.render(f"Skill Mode: {skill_name} - Click to Place", True, CYAN)
-                else:
-                    mode_text = mode_font.render(f"Skill Mode: {skill_name} - Click to Execute", True, CYAN)
-                win.blit(mode_text, (WIDTH//2 - 150, HEIGHT - 60))
-            
-            # Buff status - Right side
-            status_x = WIDTH - 200
-            status_y = HEIGHT - 120
-            status_spacing = 25
-            
-            if self.player.shield_active:
-                shield_font = pygame.font.SysFont(None, 24)
-                shield_text = shield_font.render("Shield Active!", True, CYAN)
-                win.blit(shield_text, (status_x, status_y))
-                status_y += status_spacing
-                
-            if self.player.speed_boost_active:
-                speed_font = pygame.font.SysFont(None, 24)
-                speed_text = speed_font.render("Speed Boost Active!", True, YELLOW)
-                win.blit(speed_text, (status_x, status_y))
-                status_y += status_spacing
-            
-            # Tank type indicator
-            tank_font = pygame.font.SysFont(None, 24)
-            tank_text = tank_font.render(f"Tank: {self.player.tank_type.title()}", True, BLACK)
-            win.blit(tank_text, (status_x, status_y))
+        self.player.draw_skill_bar(win, 20, HEIGHT - 100)
         
-        # Wave info - Top left
+        # Game info
         font = pygame.font.SysFont(None, 36)
+        
+        # Score
+        score_text = font.render(f"Score: {self.score}", True, BLACK)
+        win.blit(score_text, (20, 20))
+        
+        # Wave
         wave_text = font.render(f"Wave: {self.wave}", True, BLACK)
-        win.blit(wave_text, (20, 20))
+        win.blit(wave_text, (20, 60))
         
-        # Enemy info - Top left below wave
-        if self.enemy.alive:
-            enemy_info_font = pygame.font.SysFont(None, 24)
-            speed_text = enemy_info_font.render(f"Enemy Speed: {self.enemy.speed:.1f}", True, BLUE)
-            fire_text = enemy_info_font.render(f"Fire Rate: {self.enemy.fire_rate}", True, BLUE)
-            win.blit(speed_text, (20, 60))
-            win.blit(fire_text, (20, 85))
+        # Tank type
+        tank_text = font.render(f"Tank: {self.player.tank_type.title()}", True, BLACK)
+        win.blit(tank_text, (WIDTH - 200, 20))
         
-        # Heal notification - Center
-        if self.enemy_killed and self.player.alive:
-            heal_font = pygame.font.SysFont(None, 28)
-            heal_text = heal_font.render("+20 HP Restored!", True, GREEN)
-            win.blit(heal_text, (WIDTH//2-80, HEIGHT//2-100))
+        # Player HP
+        hp_text = font.render(f"HP: {self.player.hp}/{self.player.stats.hp}", True, BLACK)
+        win.blit(hp_text, (WIDTH - 200, 60))
         
-        # Game over messages
-        self.draw_game_over_messages(win)
-    
-    def draw_game_over_messages(self, win):
-        """Vẽ thông báo thắng thua"""
-        font = pygame.font.SysFont(None, 48)
-        if not self.player.alive:
-            text = font.render("YOU DIED!", True, RED)
-            win.blit(text, (WIDTH//2-100, HEIGHT//2))
-            restart_font = pygame.font.SysFont(None, 32)
-            restart_text = restart_font.render("Press R to Restart", True, BLACK)
-            win.blit(restart_text, (WIDTH//2-120, HEIGHT//2+50))
-        elif not self.enemy.alive:
-            text = font.render(f"Wave {self.wave-1} Complete!", True, BLUE)
-            win.blit(text, (WIDTH//2-150, HEIGHT//2))
-            restart_font = pygame.font.SysFont(None, 32)
-            restart_text = restart_font.render("Press R to Restart", True, BLACK)
-            win.blit(restart_text, (WIDTH//2-120, HEIGHT//2+50))
-    
-    def draw_pause_screen(self, win):
-        """Vẽ màn hình pause"""
-        pause_font = pygame.font.SysFont(None, 72)
-        pause_text = pause_font.render("PAUSED", True, BLACK)
-        pause_rect = pause_text.get_rect(center=(WIDTH//2, HEIGHT//2 - 50))
-        win.blit(pause_text, pause_rect)
+        # Skill mode indicator
+        if self.player.skill_mode:
+            skill_text = font.render(f"Skill Mode: {self.player.active_skill.title()}", True, LIGHT_BLUE)
+            win.blit(skill_text, (WIDTH//2 - 100, 20))
         
-        instruction_font = pygame.font.SysFont(None, 36)
-        instruction_text = instruction_font.render("Press P to Resume", True, BLACK)
-        instruction_rect = instruction_text.get_rect(center=(WIDTH//2, HEIGHT//2 + 20))
-        win.blit(instruction_text, instruction_rect)
+        # Buff indicators
+        if self.player.shield_active:
+            shield_text = font.render("Shield Active!", True, CYAN)
+            win.blit(shield_text, (WIDTH//2 - 100, 60))
         
-        controls_font = pygame.font.SysFont(None, 24)
-        controls_text = controls_font.render("ESC: Quit | R: Restart", True, BLACK)
-        controls_rect = controls_text.get_rect(center=(WIDTH//2, HEIGHT//2 + 60))
-        win.blit(controls_text, controls_rect)
+        if self.player.speed_boost_active:
+            speed_text = font.render("Speed Boost Active!", True, YELLOW)
+            win.blit(speed_text, (WIDTH//2 - 100, 100))
+        
+        # Pause indicator
+        if self.paused:
+            pause_text = font.render("PAUSED", True, RED)
+            win.blit(pause_text, (WIDTH//2 - 50, HEIGHT//2))
+        
+        # Game over
+        if self.game_over:
+            game_over_text = font.render("GAME OVER", True, RED)
+            restart_text = font.render("Press R to restart", True, BLACK)
+            win.blit(game_over_text, (WIDTH//2 - 100, HEIGHT//2 - 50))
+            win.blit(restart_text, (WIDTH//2 - 100, HEIGHT//2))

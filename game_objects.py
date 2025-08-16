@@ -41,13 +41,16 @@ class FireArea:
         self.duration = duration
         self.timer = duration
         self.alive = True
+        self.active = True  # Tương thích với game_manager
         self.affected_enemies = set()  # Lưu các enemy đang bị ảnh hưởng
+        self.damage_timer = 60  # Timer cho damage mỗi giây (60 frames = 1 second)
         
     def update(self):
         if self.timer > 0:
             self.timer -= 1
         else:
             self.alive = False
+            self.active = False  # Tương thích với game_manager
             
     def draw(self, win):
         if not self.alive:
@@ -197,8 +200,7 @@ class Tank:
             
             # Lưu trạng thái có sprites hay không
             self.has_sprites = True
-            print(f"Đã load sprites cho tank {self.tank_type}")
-            print(f"Body size: {TANK_SIZE}x{TANK_SIZE}, Turret size: {turret_size}x{turret_size}")
+            pass
             
         except Exception as e:
             print(f"Không thể load tank sprites cho {self.tank_type}: {e}")
@@ -758,7 +760,7 @@ class Tank:
         self.random_direction = random.uniform(0, 2 * math.pi)
 
 class Bullet:
-    def __init__(self, x, y, angle, color, speed=BULLET_SPEED, damage=BULLET_DAMAGE, is_power_shot=False):
+    def __init__(self, x, y, angle, color, speed=BULLET_SPEED, damage=BULLET_DAMAGE, is_power_shot=False, owner="player"):
         self.x = x
         self.y = y
         self.angle = angle
@@ -767,16 +769,21 @@ class Bullet:
         self.damage = damage
         self.alive = True
         self.is_power_shot = is_power_shot
+        self.owner = owner  # "player" hoặc "enemy"
         
         if is_power_shot:
             self.damage = damage + POWER_SHOT_BONUS_DAMAGE
             self.speed = POWER_SHOT_SPEED
 
     def move(self):
-        if not self.alive: return
+        if not self.alive: 
+            return
+            
         self.x += math.cos(math.radians(self.angle)) * self.speed
         self.y -= math.sin(math.radians(self.angle)) * self.speed
-        if self.x < 0 or self.x > WIDTH or self.y < 0 or self.y > HEIGHT:
+        
+        # Chỉ set alive=False khi bullet thực sự ra ngoài màn hình
+        if self.x < -10 or self.x > WIDTH + 10 or self.y < -10 or self.y > HEIGHT + 10:
             self.alive = False
 
     def draw(self, win):

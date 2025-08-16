@@ -291,25 +291,28 @@ def main():
                         
         elif current_screen == "game":
             # Xử lý sự kiện game
-            if not game_manager.handle_events():
-                running = False
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    running = False
+                    break
+            
+            if not running:
                 break
+            
+            # Xử lý events cho game
+            game_manager.handle_events(events)
             
             # Cập nhật game
-            if not game_manager.update():
-                running = False
-                break
+            game_manager.update()
             
             # Vẽ game
-            if game_manager.paused:
-                game_manager.draw_pause_screen(WIN)
-            else:
-                game_manager.draw(WIN)
+            game_manager.draw(WIN)
             
             pygame.display.update()
             
             # Kiểm tra nếu player chết hoặc muốn về home
-            if not game_manager.player.alive:
+            if game_manager.game_over:
                 # Đợi một chút rồi về home
                 pygame.time.wait(2000)
                 current_screen = "home"
