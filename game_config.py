@@ -53,9 +53,9 @@ POWER_SHOT_BONUS_DAMAGE = 20
 POWER_SHOT_SPEED = 10
 
 # Tank settings
-TANK_SIZE = 40
-TURRET_LENGTH = 35
-TANK_RADIUS = 20
+TANK_SIZE = 60          # Tăng từ 40 lên 60 (50% lớn hơn)
+TURRET_LENGTH = 55      # Giữ nguyên
+TANK_RADIUS = 30        # Tăng từ 20 lên 30 (tương ứng với TANK_SIZE)
 
 # Skill types
 SKILL_TYPE_DIRECTIONAL = "directional"      # Skill định hướng (cần nhắm)

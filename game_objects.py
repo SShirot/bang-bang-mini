@@ -112,6 +112,9 @@ class Tank:
         self.dodge_direction = 0
         self.random_direction = random.uniform(0, 2 * math.pi)
         
+        # Load tank sprites
+        self.load_tank_sprites()
+        
         # Khởi tạo skills theo loại tank
         self.init_skills()
         
@@ -166,6 +169,42 @@ class Tank:
                 'heal': Skill("Heal", HEAL_COOLDOWN, 'Q', PURPLE, '❤️', HEAL_RANGE, SKILL_TYPE_BUFF),
                 'shield': Skill("Shield", SHIELD_COOLDOWN, 'F', CYAN, '🛡️', SHIELD_RANGE, SKILL_TYPE_BUFF)
             }
+
+    def load_tank_sprites(self):
+        """Load sprites cho tank"""
+        try:
+            if self.tank_type == TANK_TYPE_NARUTO:
+                self.body_sprite = pygame.image.load("assets/tanks/naruto/body.png")
+                self.turret_sprite = pygame.image.load("assets/tanks/naruto/turret.png")
+            elif self.tank_type == TANK_TYPE_SASUKE:
+                # Tạm thời dùng sprites của Naruto cho Sasuke
+                # Bạn có thể thay thế bằng sprites riêng sau
+                self.body_sprite = pygame.image.load("assets/tanks/naruto/body.png")
+                self.turret_sprite = pygame.image.load("assets/tanks/naruto/turret.png")
+            else:
+                # Enemy tank - tạm thời dùng sprites của Naruto
+                # Bạn có thể thay thế bằng sprites riêng sau
+                self.body_sprite = pygame.image.load("assets/tanks/naruto/body.png")
+                self.turret_sprite = pygame.image.load("assets/tanks/naruto/turret.png")
+            
+            # Scale sprites về kích thước phù hợp
+            # Body: giữ nguyên kích thước TANK_SIZE (60x60)
+            self.body_sprite = pygame.transform.scale(self.body_sprite, (TANK_SIZE, TANK_SIZE))
+            
+            # Turret: làm to hơn, khoảng 1/3 kích thước body thay vì 1/5
+            turret_size = max(16, TANK_SIZE // 3)  # Khoảng 20px, tối thiểu 16px
+            self.turret_sprite = pygame.transform.scale(self.turret_sprite, (turret_size, turret_size))
+            
+            # Lưu trạng thái có sprites hay không
+            self.has_sprites = True
+            print(f"Đã load sprites cho tank {self.tank_type}")
+            print(f"Body size: {TANK_SIZE}x{TANK_SIZE}, Turret size: {turret_size}x{turret_size}")
+            
+        except Exception as e:
+            print(f"Không thể load tank sprites cho {self.tank_type}: {e}")
+            print("Sẽ sử dụng vẽ thủ công thay thế")
+            # Fallback về vẽ thủ công
+            self.has_sprites = False
 
     def use_skill(self, skill_name):
         if skill_name in self.skills:
@@ -536,18 +575,13 @@ class Tank:
         if not self.alive: 
             return
         
-        # Thân tank
-        body_rect = pygame.Rect(self.x-TANK_RADIUS, self.y-TANK_RADIUS, TANK_SIZE, TANK_SIZE)
-        pygame.draw.rect(win, self.body_color, body_rect)
+        if hasattr(self, 'has_sprites') and self.has_sprites:
+            # Vẽ tank bằng sprites
+            self.draw_with_sprites(win)
+        else:
+            # Fallback về vẽ thủ công
+            self.draw_manual(win)
         
-        # Nòng tank
-        end_x = self.x + math.cos(math.radians(self.turret_angle)) * TURRET_LENGTH
-        end_y = self.y - math.sin(math.radians(self.turret_angle)) * TURRET_LENGTH
-        pygame.draw.line(win, self.turret_color, (self.x, self.y), (end_x, end_y), 6)
-        
-        # Trục tank
-        pygame.draw.circle(win, self.turret_color, (int(self.x), int(self.y)), 8)
-
         # Thanh máu
         bar_width = TANK_SIZE
         bar_height = 6
@@ -567,6 +601,33 @@ class Tank:
         if self.speed_boost_active:
             pygame.draw.circle(win, YELLOW, (int(self.x), int(self.y)), 40, 2)
     
+    def draw_with_sprites(self, win):
+        """Vẽ tank bằng sprites"""
+        # Vẽ tank body (xoay theo hướng di chuyển)
+        rotated_body = pygame.transform.rotate(self.body_sprite, -self.body_angle)
+        body_rect = rotated_body.get_rect(center=(self.x, self.y))
+        win.blit(rotated_body, body_rect)
+        
+        # Vẽ turret (xoay theo hướng nhắm)
+        rotated_turret = pygame.transform.rotate(self.turret_sprite, -self.turret_angle)
+        turret_rect = rotated_turret.get_rect(center=(self.x, self.y))
+        win.blit(rotated_turret, turret_rect)
+    
+    def draw_manual(self, win):
+        """Vẽ tank thủ công (fallback)"""
+        # Thân tank
+        body_rect = pygame.Rect(self.x-TANK_RADIUS, self.y-TANK_RADIUS, TANK_SIZE, TANK_SIZE)
+        pygame.draw.rect(win, self.body_color, body_rect)
+        
+        # Nòng tank - làm to hơn, khoảng 1/3 body size
+        turret_size = max(16, TANK_SIZE // 3)  # Khoảng 20px, tối thiểu 16px
+        pygame.draw.circle(win, self.turret_color, (int(self.x), int(self.y)), turret_size // 2)
+        
+        # Vẽ hướng nhắm (tùy chọn - có thể bỏ nếu không cần)
+        # end_x = self.x + math.cos(math.radians(self.turret_angle)) * (turret_size // 2 + 2)
+        # end_y = self.y - math.sin(math.radians(self.turret_angle)) * (turret_size // 2 + 2)
+        # pygame.draw.line(win, self.turret_color, (self.x, self.y), (end_x, end_y), 2)
+
     def draw_skill_targeting(self, win):
         """Vẽ skill targeting khi ở skill mode"""
         if not self.skill_mode or not self.active_skill or not self.skill_target_pos:
