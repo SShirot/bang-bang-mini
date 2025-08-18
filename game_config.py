@@ -85,9 +85,9 @@ POWER_SHOT_BONUS_DAMAGE = 20
 POWER_SHOT_SPEED = 10
 
 # Debug: In ra constants
-print(f"🔧 BULLET_SPEED: {BULLET_SPEED}")
-print(f"🔧 WIDTH: {WIDTH}, HEIGHT: {HEIGHT}")
-print(f"🔧 PLAYER_FIRE_RATE: {PLAYER_FIRE_RATE}")
+print(f"BULLET_SPEED: {BULLET_SPEED}")
+print(f"WIDTH: {WIDTH}, HEIGHT: {HEIGHT}")
+print(f"PLAYER_FIRE_RATE: {PLAYER_FIRE_RATE}")
 
 # Tank settings
 TANK_SIZE = 60          # Tăng từ 40 lên 60 (50% lớn hơn)
@@ -115,5 +115,5 @@ FIRE_DAMAGE_PER_SECOND = 10
 FIRE_SLOW_FACTOR = 0.5
 
 # Speed boost settings
-SPEED_BOOST_FACTOR = 2.0
-SPEED_BOOST_DURATION = 300  # 5 seconds
+SPEED_BOOST_FACTOR = 1.5  # Reduced from 2.0
+SPEED_BOOST_DURATION = 180  # 3 seconds, reduced from 5 seconds
