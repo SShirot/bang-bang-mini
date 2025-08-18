@@ -1,6 +1,28 @@
 # Tank Battle Game - Refactored Version
 
-## Cấu trúc dự án mới
+## 🚀 How to Install
+
+### **Bước 1: Clone repository**
+```bash
+git clone <repository-url>
+cd bang-bang-mini
+```
+
+### **Bước 2: Cài đặt dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+### **Bước 3: Chạy game**
+```bash
+python game.py
+```
+
+## 📋 Requirements
+- Python 3.7+
+- Pygame 2.0+
+
+## 🎮 Cấu trúc dự án mới
 
 Game đã được refactor để dễ scale và maintain hơn với cấu trúc module:
 

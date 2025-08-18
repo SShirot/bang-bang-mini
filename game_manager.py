@@ -30,7 +30,7 @@ class GameManager:
     def set_tank_type(self, tank_type):
         """Set loại tank được chọn"""
         self.selected_tank_type = tank_type
-    
+        
     def init_game(self):
         """Khởi tạo game"""
         # Tạo player tank
@@ -53,10 +53,6 @@ class GameManager:
     
     def spawn_enemy(self):
         """Spawn enemy mới"""
-        # Chỉ spawn 1 enemy mỗi lần để tăng performance
-        if len(self.enemies) >= 3:  # Giới hạn số enemy tối đa
-            return
-            
         # Random loại enemy
         enemy_types = [BasicEnemy, FastEnemy, TankEnemy]
         enemy_class = random.choice(enemy_types)
@@ -118,8 +114,8 @@ class GameManager:
                 self.player.execute_speed_boost()
         elif event.key == pygame.K_SPACE:
             if self.player.tank_type == TANK_TYPE_NARUTO:
-                # Naruto: Power Shot
-                self.player.activate_skill_mode('power_shot')
+                # Naruto: Triple Power Shot
+                self.player.activate_skill_mode('triple_power_shot')
             elif self.player.tank_type == TANK_TYPE_SASUKE:
                 # Sasuke: Fire Area
                 self.player.activate_skill_mode('fire_area')
@@ -127,8 +123,12 @@ class GameManager:
             # Heal cho cả hai
             self.player.execute_heal()
         elif event.key == pygame.K_f:
-            # Shield cho cả hai
-            self.player.execute_shield()
+            if self.player.tank_type == TANK_TYPE_NARUTO:
+                # Naruto: Thần Tiễn Mode
+                self.player.execute_divine_arrow()
+            elif self.player.tank_type == TANK_TYPE_SASUKE:
+                # Sasuke: Shield
+                self.player.execute_shield()
         
         return None
     
@@ -152,7 +152,7 @@ class GameManager:
         """Thực thi skill tại vị trí mục tiêu"""
         if not self.player.skill_mode:
             return
-        
+            
         # Thực thi skill
         result = self.player.execute_skill(target_pos)
         
@@ -164,6 +164,11 @@ class GameManager:
                 if success and obj:
                     if hasattr(obj, '__class__') and obj.__class__.__name__ == 'FireArea':
                         self.fire_areas.append(obj)
+            elif isinstance(result, list):
+                # Triple power shot trả về list bullets
+                for bullet in result:
+                    if bullet.__class__.__name__ == 'Bullet':
+                        self.bullets.append(bullet)
             elif hasattr(result, '__class__'):
                 # Object trả về trực tiếp
                 if result.__class__.__name__ == 'Bullet':
@@ -242,6 +247,11 @@ class GameManager:
         """Cập nhật player"""
         if self.player and self.player.alive:
             self.player.update()
+            # Cập nhật divine arrow mode cho Naruto
+            if hasattr(self.player, 'update_divine_arrow_mode'):
+                divine_bullet = self.player.update_divine_arrow_mode()
+                if divine_bullet:
+                    self.bullets.append(divine_bullet)
     
     def update_enemies(self):
         """Cập nhật enemies - tối ưu hóa performance"""
@@ -345,6 +355,10 @@ class GameManager:
                             
                             # Player hồi máu
                             self.player.heal(20)
+                            
+                            # Nếu đang ở Thần Tiễn mode, +1s duy trì
+                            if hasattr(self.player, 'divine_arrow_active') and self.player.divine_arrow_active:
+                                self.player.extend_divine_arrow_duration(60)  # +60 frames = +1 second
                             
                             # Spawn enemy mới
                             self.spawn_enemy()

@@ -68,6 +68,7 @@ HEAL_COOLDOWN = 300      # 5 seconds
 SHIELD_COOLDOWN = 600    # 10 seconds
 FIRE_AREA_COOLDOWN = 400  # ~6.7 seconds
 SPEED_BOOST_COOLDOWN = 450  # 7.5 seconds
+DIVINE_ARROW_COOLDOWN = 600  # 10 seconds
 
 # Skill ranges
 DASH_RANGE = 100

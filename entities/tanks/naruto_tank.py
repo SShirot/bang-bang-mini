@@ -19,14 +19,25 @@ class NarutoTank(BaseTank):
         )
         
         super().__init__(x, y, naruto_stats, TANK_TYPE_NARUTO, DARK_GREEN, DARK_GREEN)
+        
+        # Divine Arrow Mode
+        self.divine_arrow_active = False
+        self.divine_arrow_timer = 0
+        self.divine_arrow_duration = 300  # 5 seconds at 60 FPS
+        self.divine_arrow_fire_timer = 0
+        self.divine_arrow_fire_rate = 20  # Bắn mỗi 20 frames (3 shots/second)
+        
+        # Lưu stats gốc để restore
+        self.original_speed = naruto_stats.speed
+        self.original_fire_rate = naruto_stats.attack_speed
     
     def init_skills(self):
         """Khởi tạo skills cho Naruto"""
         self.skills = {
             'dash': BaseSkill("Dash", DASH_COOLDOWN, 'E', YELLOW, '⚡', DASH_RANGE, SKILL_TYPE_DIRECTIONAL),
-            'power_shot': BaseSkill("Power Shot", POWER_SHOT_COOLDOWN, 'SPACE', ORANGE, '💥', POWER_SHOT_RANGE, SKILL_TYPE_DIRECTIONAL),
+            'triple_power_shot': BaseSkill("Triple Power Shot", POWER_SHOT_COOLDOWN, 'SPACE', ORANGE, '💥', POWER_SHOT_RANGE, SKILL_TYPE_DIRECTIONAL),
             'heal': BaseSkill("Heal", HEAL_COOLDOWN, 'Q', PURPLE, '❤️', HEAL_RANGE, SKILL_TYPE_BUFF),
-            'shield': BaseSkill("Shield", SHIELD_COOLDOWN, 'F', CYAN, '🛡️', SHIELD_RANGE, SKILL_TYPE_BUFF)
+            'divine_arrow': BaseSkill("Thần Tiễn", DIVINE_ARROW_COOLDOWN, 'F', RED, '🏹', None, SKILL_TYPE_BUFF)
         }
     
     def execute_dash(self, target_pos):
@@ -65,31 +76,35 @@ class NarutoTank(BaseTank):
                 return True
         return False
     
-    def execute_power_shot(self, target_pos):
-        """Thực thi power shot đến vị trí mục tiêu"""
-        if self.skills['power_shot'].use():
+    def execute_triple_power_shot(self, target_pos):
+        """Thực thi triple power shot theo 3 hướng"""
+        if self.skills['triple_power_shot'].use():
             dx = target_pos[0] - self.x
             dy = target_pos[1] - self.y
             distance = math.sqrt(dx*dx + dy*dy)
             
             if distance > 0:
-                # Power shot có range vô hạn, không cần điều chỉnh range
-                # Tính góc từ tank đến target
-                angle = math.degrees(math.atan2(-dy, dx))
+                # Tính góc chính từ tank đến target
+                main_angle = math.degrees(math.atan2(-dy, dx))
                 
-                # Tạo bullet đặc biệt
+                # Tạo 3 bullets theo 3 hướng: chính, trái, phải
+                angles = [main_angle, main_angle - 30, main_angle + 30]
+                bullets = []
+                
                 from game_objects import Bullet
-                bullet = Bullet(
-                    self.x,
-                    self.y,
-                    angle,
-                    YELLOW,
-                    speed=POWER_SHOT_SPEED,
-                    damage=BULLET_DAMAGE + POWER_SHOT_BONUS_DAMAGE,
-                    is_power_shot=True
-                )
+                for angle in angles:
+                    bullet = Bullet(
+                        self.x,
+                        self.y,
+                        angle,
+                        YELLOW,
+                        speed=POWER_SHOT_SPEED,
+                        damage=BULLET_DAMAGE + POWER_SHOT_BONUS_DAMAGE,
+                        is_power_shot=True
+                    )
+                    bullets.append(bullet)
                 
-                return bullet
+                return bullets
         return None
     
     def execute_heal(self):
@@ -99,11 +114,18 @@ class NarutoTank(BaseTank):
             return True
         return False
     
-    def execute_shield(self):
-        """Thực thi shield"""
-        if self.skills['shield'].use():
-            self.shield_active = True
-            self.shield_timer = self.shield_duration
+    def execute_divine_arrow(self):
+        """Thực thi Thần Tiễn Mode"""
+        if self.skills['divine_arrow'].use():
+            # Kích hoạt Divine Arrow Mode
+            self.divine_arrow_active = True
+            self.divine_arrow_timer = self.divine_arrow_duration
+            self.divine_arrow_fire_timer = 0
+            
+            # Tăng stats: speed x1.5, fire rate x1.5
+            self.speed = self.original_speed * 1.5
+            self.stats.attack_speed = int(self.original_fire_rate / 1.5)
+            
             return True
         return False
     
@@ -121,8 +143,8 @@ class NarutoTank(BaseTank):
         if skill.skill_type == SKILL_TYPE_DIRECTIONAL:
             if self.active_skill == 'dash':
                 return self.execute_dash(target_pos)
-            elif self.active_skill == 'power_shot':
-                return self.execute_power_shot(target_pos)
+            elif self.active_skill == 'triple_power_shot':
+                return self.execute_triple_power_shot(target_pos)
         elif skill.skill_type == SKILL_TYPE_AREA:
             return self.execute_area_skill(target_pos)
         
@@ -194,8 +216,62 @@ class NarutoTank(BaseTank):
                         end_y = 0
                         end_x = self.x + dx * (0 - self.y) / dy
                 
-                # Vẽ tia vector
+                # Vẽ tia vector chính
                 pygame.draw.line(win, skill.color, (int(self.x), int(self.y)), (int(end_x), int(end_y)), 2)
+                
+                # Nếu là Triple Power Shot, vẽ thêm 2 hướng phụ
+                if skill.name == "Triple Power Shot":
+                    # Tính góc chính
+                    main_angle = math.atan2(-dy, dx)
+                    
+                    # Vẽ hướng trái (lệch 30°)
+                    left_angle = main_angle - math.radians(30)
+                    left_dx = math.cos(left_angle)
+                    left_dy = -math.sin(left_angle)
+                    
+                    # Tìm điểm cuối hướng trái
+                    if abs(left_dx) > abs(left_dy):
+                        if left_dx > 0:
+                            left_end_x = WIDTH
+                            left_end_y = self.y + left_dy * (WIDTH - self.x) / left_dx
+                        else:
+                            left_end_x = 0
+                            left_end_y = self.y + left_dy * (0 - self.x) / left_dx
+                    else:
+                        if left_dy > 0:
+                            left_end_y = HEIGHT
+                            left_end_x = self.x + left_dx * (HEIGHT - self.y) / left_dy
+                        else:
+                            left_end_y = 0
+                            left_end_x = self.x + left_dx * (0 - self.y) / left_dy
+                    
+                    # Vẽ tia vector hướng trái (màu nhạt hơn)
+                    left_color = (skill.color[0]//2, skill.color[1]//2, skill.color[2]//2)
+                    pygame.draw.line(win, left_color, (int(self.x), int(self.y)), (int(left_end_x), int(left_end_y)), 1)
+                    
+                    # Vẽ hướng phải (lệch 30°)
+                    right_angle = main_angle + math.radians(30)
+                    right_dx = math.cos(right_angle)
+                    right_dy = -math.sin(right_angle)
+                    
+                    # Tìm điểm cuối hướng phải
+                    if abs(right_dx) > abs(right_dy):
+                        if right_dx > 0:
+                            right_end_x = WIDTH
+                            right_end_y = self.y + right_dy * (WIDTH - self.x) / right_dx
+                        else:
+                            right_end_x = 0
+                            right_end_y = self.y + right_dy * (0 - self.x) / right_dx
+                    else:
+                        if right_dy > 0:
+                            right_end_y = HEIGHT
+                            right_end_x = self.x + right_dx * (HEIGHT - self.y) / right_dy
+                        else:
+                            right_end_y = 0
+                            right_end_x = self.x + right_dx * (0 - self.y) / right_dy
+                    
+                    # Vẽ tia vector hướng phải (màu nhạt hơn)
+                    pygame.draw.line(win, left_color, (int(self.x), int(self.y)), (int(right_end_x), int(right_end_y)), 1)
         
         # Vẽ line từ tank đến target
         pygame.draw.line(win, skill.color, (int(self.x), int(self.y)), (int(target_x), int(target_y)), 3)
@@ -208,6 +284,51 @@ class NarutoTank(BaseTank):
         font = pygame.font.SysFont(None, 24)
         skill_text = font.render(f"{skill.name} Mode", True, skill.color)
         win.blit(skill_text, (target_x + 15, target_y - 10))
+    
+    def update_divine_arrow_mode(self):
+        """Cập nhật Divine Arrow Mode"""
+        if self.divine_arrow_active:
+            # Giảm timer
+            self.divine_arrow_timer -= 1
+            
+            # Tự động bắn power shot
+            self.divine_arrow_fire_timer += 1
+            if self.divine_arrow_fire_timer >= self.divine_arrow_fire_rate:
+                self.divine_arrow_fire_timer = 0
+                
+                # Bắn power shot theo hướng turret hiện tại
+                from game_objects import Bullet
+                bullet = Bullet(
+                    self.x,
+                    self.y,
+                    self.turret_angle,
+                    YELLOW,
+                    speed=POWER_SHOT_SPEED,
+                    damage=BULLET_DAMAGE + POWER_SHOT_BONUS_DAMAGE,
+                    is_power_shot=True
+                )
+                
+                # Thêm bullet vào game (cần return để game_manager xử lý)
+                # Tạm thời return None, sẽ xử lý trong game_manager
+                return bullet
+            
+            # Hết thời gian Divine Arrow Mode
+            if self.divine_arrow_timer <= 0:
+                self.divine_arrow_active = False
+                # Restore stats gốc
+                self.speed = self.original_speed
+                self.stats.attack_speed = self.original_fire_rate
+        
+        return None
+    
+    def extend_divine_arrow_duration(self, additional_frames):
+        """Kéo dài thời gian Thần Tiễn mode"""
+        if self.divine_arrow_active:
+            self.divine_arrow_timer += additional_frames
+            # Giới hạn tối đa 10 giây (600 frames)
+            max_duration = 600
+            if self.divine_arrow_timer > max_duration:
+                self.divine_arrow_timer = max_duration
     
     def draw_skill_bar(self, win, x, y):
         """Vẽ skill bar"""
@@ -223,6 +344,18 @@ class NarutoTank(BaseTank):
             if self.skill_mode and self.active_skill == skill_name:
                 bg_color = LIGHT_BLUE
                 pygame.draw.rect(win, bg_color, (skill_x-3, skill_y-3, skill_width+6, skill_height+6))
+            
+            # Highlight Divine Arrow Mode
+            if skill_name == 'divine_arrow' and self.divine_arrow_active:
+                bg_color = RED
+                pygame.draw.rect(win, bg_color, (skill_x-3, skill_y-3, skill_width+6, skill_height+6))
+                
+                # Hiển thị thời gian còn lại
+                remaining_seconds = self.divine_arrow_timer // 60
+                time_font = pygame.font.SysFont(None, 16)
+                time_text = time_font.render(f"+{remaining_seconds}s", True, WHITE)
+                time_rect = time_text.get_rect(center=(skill_x + skill_width//2, skill_y + skill_height//2 + 15))
+                win.blit(time_text, time_rect)
             
             bg_color = skill.color if skill.ready else (100, 100, 100)
             pygame.draw.rect(win, bg_color, (skill_x, skill_y, skill_width, skill_height))
